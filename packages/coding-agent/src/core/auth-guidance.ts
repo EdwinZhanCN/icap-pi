@@ -1,14 +1,8 @@
-import { join } from "node:path";
-import { getDocsPath } from "../config.ts";
-
 const UNKNOWN_PROVIDER = "unknown";
 
+/** The harness has no /login of its own: the host that embeds it logs in and adds keys. */
 export function getProviderLoginHelp(): string {
-	return [
-		"Use /login to log into a provider via OAuth or API key. See:",
-		`  ${join(getDocsPath(), "providers.md")}`,
-		`  ${join(getDocsPath(), "models.md")}`,
-	].join("\n");
+	return "Log in to a model provider, or add an API key, in the settings of the application you are using.";
 }
 
 export function formatNoModelsAvailableMessage(): string {
@@ -16,7 +10,7 @@ export function formatNoModelsAvailableMessage(): string {
 }
 
 export function formatNoModelSelectedMessage(): string {
-	return `No model selected.\n\n${getProviderLoginHelp()}\n\nThen use /model to select a model.`;
+	return `No model selected.\n\n${getProviderLoginHelp()}`;
 }
 
 export function formatNoApiKeyFoundMessage(provider: string): string {

@@ -10,9 +10,7 @@ import {
 	type Model,
 	modelsAreEqual,
 } from "@earendil-works/pi-ai";
-import chalk from "chalk";
 import { minimatch } from "minimatch";
-import { isValidThinkingLevel } from "../cli/args.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
 
@@ -117,6 +115,12 @@ export interface ModelReferenceTarget {
 }
 
 type ResolvedOrAmbiguous = Exclude<ModelReferenceResult, { status: "not-found" }>;
+
+const VALID_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+
+function isValidThinkingLevel(level: string): level is ThinkingLevel {
+	return VALID_THINKING_LEVELS.includes(level as ThinkingLevel);
+}
 
 function splitThinkingSuffix(text: string): { base: string; thinkingLevel: ThinkingLevel } | undefined {
 	const colonIndex = text.lastIndexOf(":");
@@ -421,7 +425,7 @@ export async function resolveModelScope(
 ): Promise<ScopedModel[]> {
 	const { scopedModels, diagnostics } = await resolveModelScopeWithDiagnostics(patterns, modelRuntime, options);
 	for (const diagnostic of diagnostics) {
-		console.warn(chalk.yellow(`Warning: ${diagnostic.message}`));
+		console.warn(`Warning: ${diagnostic.message}`);
 	}
 	return scopedModels;
 }
@@ -632,7 +636,7 @@ export async function restoreModelFromSession(
 
 	if (restoredModel && hasConfiguredAuth) {
 		if (shouldPrintMessages) {
-			console.log(chalk.dim(`Restored model: ${savedProvider}/${savedModelId}`));
+			console.log(`Restored model: ${savedProvider}/${savedModelId}`);
 		}
 		return { model: restoredModel, fallbackMessage: undefined };
 	}
@@ -641,13 +645,13 @@ export async function restoreModelFromSession(
 	const reason = !restoredModel ? "model no longer exists" : "no auth configured";
 
 	if (shouldPrintMessages) {
-		console.error(chalk.yellow(`Warning: Could not restore model ${savedProvider}/${savedModelId} (${reason}).`));
+		console.error(`Warning: Could not restore model ${savedProvider}/${savedModelId} (${reason}).`);
 	}
 
 	// If we already have a model, use it as fallback
 	if (currentModel) {
 		if (shouldPrintMessages) {
-			console.log(chalk.dim(`Falling back to: ${currentModel.provider}/${currentModel.id}`));
+			console.log(`Falling back to: ${currentModel.provider}/${currentModel.id}`);
 		}
 		return {
 			model: currentModel,
@@ -676,7 +680,7 @@ export async function restoreModelFromSession(
 		}
 
 		if (shouldPrintMessages) {
-			console.log(chalk.dim(`Falling back to: ${fallbackModel.provider}/${fallbackModel.id}`));
+			console.log(`Falling back to: ${fallbackModel.provider}/${fallbackModel.id}`);
 		}
 
 		return {

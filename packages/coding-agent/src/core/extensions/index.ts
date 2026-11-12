@@ -4,12 +4,7 @@
 
 export type { SlashCommandInfo, SlashCommandSource } from "../slash-commands.ts";
 export type { SourceInfo } from "../source-info.ts";
-export {
-	createExtensionRuntime,
-	discoverAndLoadExtensions,
-	loadExtensionFromFactory,
-	loadExtensions,
-} from "./loader.ts";
+export { createExtensionRuntime, loadExtensionFromFactory } from "./loader.ts";
 export type {
 	ExtensionErrorListener,
 	ForkHandler,
@@ -96,14 +91,10 @@ export type {
 	ExtensionUIDialogOptions,
 	ExtensionVirtualModel,
 	ExtensionWidgetOptions,
-	FindToolCallEvent,
-	FindToolResultEvent,
 	GetActiveToolsHandler,
 	GetAllToolsHandler,
 	GetCommandsHandler,
 	GetThinkingLevelHandler,
-	GrepToolCallEvent,
-	GrepToolResultEvent,
 	InlineExtension,
 	// Events - Input
 	InputEvent,
@@ -112,8 +103,6 @@ export type {
 	KeybindingHints,
 	KeybindingsManager,
 	LoadExtensionsResult,
-	LsToolCallEvent,
-	LsToolResultEvent,
 	MarkdownMessageType,
 	MarkdownTransformContext,
 	MarkdownTransformer,
@@ -218,9 +207,6 @@ export {
 	defineTool,
 	isBashToolResult,
 	isEditToolResult,
-	isFindToolResult,
-	isGrepToolResult,
-	isLsToolResult,
 	isPowerShellToolResult,
 	isReadToolResult,
 	isToolCallEventType,

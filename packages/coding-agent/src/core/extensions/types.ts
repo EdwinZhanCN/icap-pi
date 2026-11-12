@@ -55,16 +55,15 @@ import type {
 	OverlayOptions,
 	ProgramStatus,
 	TUI,
-} from "@earendil-works/pi-tui";
+} from "../ui-types.ts";
 import type { Static, TSchema } from "typebox";
-import type { Theme } from "../../modes/interactive/theme/theme.ts";
+import type { Theme } from "../ui-types.ts";
 import type { BashResult } from "../bash-executor.ts";
 import type { CacheWarmingDecisionEvent, CacheWarmingDecisionEventResult } from "../cache-warmer.ts";
 import type { CompactionPreparation, CompactionResult } from "../compaction/index.ts";
 import type { EventBus } from "../event-bus.ts";
 import type { ExecOptions, ExecResult } from "../exec.ts";
-import type { ReadonlyFooterDataProvider } from "../footer-data-provider.ts";
-import type { KeybindingsManager } from "../keybindings.ts";
+import type { KeybindingsManager, ReadonlyFooterDataProvider } from "../ui-types.ts";
 import type { McpServerConfig, McpServerRegistry, RegisteredMcpServer } from "../mcp-servers.ts";
 import type { CustomMessage } from "../messages.ts";
 import type { ModelRegistry } from "../model-registry.ts";
@@ -89,12 +88,6 @@ import type {
 	BashToolDetails,
 	BashToolInput,
 	EditToolInput,
-	FindToolDetails,
-	FindToolInput,
-	GrepToolDetails,
-	GrepToolInput,
-	LsToolDetails,
-	LsToolInput,
 	PowerShellToolDetails,
 	PowerShellToolInput,
 	ReadToolDetails,
@@ -106,7 +99,7 @@ import type { ModelRoute, ModelRouteRequest, VirtualModelDefinition } from "../v
 export type { ExecOptions, ExecResult } from "../exec.ts";
 export type { BuildSystemPromptOptions, NormalizedBuildSystemPromptOptions } from "../system-prompt.ts";
 export type { AgentToolResult, AgentToolUpdateCallback, ToolExecutionMode };
-export type { AppKeybinding, KeybindingsManager } from "../keybindings.ts";
+export type { AppKeybinding, KeybindingsManager } from "../ui-types.ts";
 
 // ============================================================================
 // UI Context
@@ -1248,21 +1241,6 @@ export interface WriteToolCallEvent extends ToolCallEventBase {
 	input: WriteToolInput;
 }
 
-export interface GrepToolCallEvent extends ToolCallEventBase {
-	toolName: "grep";
-	input: GrepToolInput;
-}
-
-export interface FindToolCallEvent extends ToolCallEventBase {
-	toolName: "find";
-	input: FindToolInput;
-}
-
-export interface LsToolCallEvent extends ToolCallEventBase {
-	toolName: "ls";
-	input: LsToolInput;
-}
-
 export interface CustomToolCallEvent extends ToolCallEventBase {
 	toolName: string;
 	input: Record<string, unknown>;
@@ -1280,9 +1258,6 @@ export type ToolCallEvent =
 	| ReadToolCallEvent
 	| EditToolCallEvent
 	| WriteToolCallEvent
-	| GrepToolCallEvent
-	| FindToolCallEvent
-	| LsToolCallEvent
 	| CustomToolCallEvent;
 
 interface ToolResultEventBase {
@@ -1328,21 +1303,6 @@ export interface WriteToolResultEvent extends ToolResultEventBase {
 	details: undefined;
 }
 
-export interface GrepToolResultEvent extends ToolResultEventBase {
-	toolName: "grep";
-	details: GrepToolDetails | undefined;
-}
-
-export interface FindToolResultEvent extends ToolResultEventBase {
-	toolName: "find";
-	details: FindToolDetails | undefined;
-}
-
-export interface LsToolResultEvent extends ToolResultEventBase {
-	toolName: "ls";
-	details: LsToolDetails | undefined;
-}
-
 export interface CustomToolResultEvent extends ToolResultEventBase {
 	toolName: string;
 	details: unknown;
@@ -1355,9 +1315,6 @@ export type ToolResultEvent =
 	| ReadToolResultEvent
 	| EditToolResultEvent
 	| WriteToolResultEvent
-	| GrepToolResultEvent
-	| FindToolResultEvent
-	| LsToolResultEvent
 	| CustomToolResultEvent;
 
 // Type guards for ToolResultEvent
@@ -1375,15 +1332,6 @@ export function isEditToolResult(e: ToolResultEvent): e is EditToolResultEvent {
 }
 export function isWriteToolResult(e: ToolResultEvent): e is WriteToolResultEvent {
 	return e.toolName === "write";
-}
-export function isGrepToolResult(e: ToolResultEvent): e is GrepToolResultEvent {
-	return e.toolName === "grep";
-}
-export function isFindToolResult(e: ToolResultEvent): e is FindToolResultEvent {
-	return e.toolName === "find";
-}
-export function isLsToolResult(e: ToolResultEvent): e is LsToolResultEvent {
-	return e.toolName === "ls";
 }
 
 /**
@@ -1411,9 +1359,6 @@ export function isToolCallEventType(toolName: "powershell", event: ToolCallEvent
 export function isToolCallEventType(toolName: "read", event: ToolCallEvent): event is ReadToolCallEvent;
 export function isToolCallEventType(toolName: "edit", event: ToolCallEvent): event is EditToolCallEvent;
 export function isToolCallEventType(toolName: "write", event: ToolCallEvent): event is WriteToolCallEvent;
-export function isToolCallEventType(toolName: "grep", event: ToolCallEvent): event is GrepToolCallEvent;
-export function isToolCallEventType(toolName: "find", event: ToolCallEvent): event is FindToolCallEvent;
-export function isToolCallEventType(toolName: "ls", event: ToolCallEvent): event is LsToolCallEvent;
 export function isToolCallEventType<TName extends string, TInput extends Record<string, unknown>>(
 	toolName: TName,
 	event: ToolCallEvent,

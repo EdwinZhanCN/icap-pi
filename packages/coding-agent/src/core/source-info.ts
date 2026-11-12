@@ -1,8 +1,16 @@
 import { canonicalizePath, getPathComparisonKey } from "../utils/paths.ts";
-import type { PathMetadata } from "./package-manager.ts";
-
 export type SourceScope = "user" | "project" | "temporary";
 export type SourceOrigin = "package" | "top-level";
+
+/** Where a resource path came from. (Upstream's package manager fills this in; here only the resource loader does.) */
+export interface PathMetadata {
+	source: string;
+	scope: SourceScope;
+	origin: SourceOrigin;
+	baseDir?: string;
+	changelogPath?: string;
+	packageRoot?: string;
+}
 
 export interface SourceInfo {
 	path: string;

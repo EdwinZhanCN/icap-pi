@@ -10,11 +10,9 @@ import {
 	type Provider,
 	type ProviderHeaders,
 } from "@earendil-works/pi-ai";
-import type { KeyId } from "@earendil-works/pi-tui";
-import { type Theme, theme } from "../../modes/interactive/theme/theme.ts";
+import type { KeybindingsConfig, KeyId, Theme } from "../ui-types.ts";
 import type { CacheWarmingAction } from "../cache-warmer.ts";
 import type { ResourceDiagnostic } from "../diagnostics.ts";
-import type { KeybindingsConfig } from "../keybindings.ts";
 import type { ModelRegistry } from "../model-registry.ts";
 import type { ScopedModel } from "../model-resolver.ts";
 import type { SessionManager } from "../session-manager.ts";
@@ -117,6 +115,9 @@ const RESERVED_KEYBINDINGS_FOR_EXTENSION_CONFLICTS = [
 ] as const;
 
 type BuiltInKeyBindings = Partial<Record<KeyId, { keybinding: string; restrictOverride: boolean }>>;
+
+/** There is no terminal, so no theme: the UI context of a session nobody bound answers with this. */
+const NO_THEME: Theme = Object.freeze({});
 
 const buildBuiltinKeybindings = (resolvedKeybindings: KeybindingsConfig): BuiltInKeyBindings => {
 	const builtinKeybindings = {} as BuiltInKeyBindings;
@@ -352,7 +353,7 @@ const noOpUIContext: ExtensionUIContext = {
 	setEditorComponent: () => {},
 	getEditorComponent: () => undefined,
 	get theme() {
-		return theme;
+		return NO_THEME;
 	},
 	getAllThemes: () => [],
 	getTheme: () => undefined,

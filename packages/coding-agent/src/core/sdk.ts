@@ -29,13 +29,11 @@ import {
 	createBashTool,
 	createCodingTools,
 	createEditTool,
-	createFindTool,
-	createGrepTool,
-	createLsTool,
 	createPowerShellTool,
 	createReadOnlyTools,
 	createReadTool,
 	createWriteTool,
+	type ToolsOptions,
 	withFileMutationQueue,
 } from "./tools/index.ts";
 import { getBranchSelection } from "./virtual-models.ts";
@@ -92,6 +90,8 @@ export interface CreateAgentSessionOptions {
 	excludeTools?: string[];
 	/** Custom tools to register (in addition to built-in tools). */
 	customTools?: ToolDefinition[];
+	/** How the built-in tools act: see `AgentSessionConfig.toolOptions`. */
+	toolOptions?: ToolsOptions;
 
 	/** Resource loader. When omitted, DefaultResourceLoader is used. */
 	resourceLoader?: ResourceLoader;
@@ -141,9 +141,6 @@ export {
 	createBashTool,
 	createEditTool,
 	createWriteTool,
-	createGrepTool,
-	createFindTool,
-	createLsTool,
 	createPowerShellTool,
 };
 
@@ -460,6 +457,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		scopedModels: options.scopedModels,
 		resourceLoader,
 		customTools: options.customTools,
+		toolOptions: options.toolOptions,
 		modelRuntime,
 		cacheWarmer,
 		initialActiveToolNames,

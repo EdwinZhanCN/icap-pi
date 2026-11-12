@@ -166,15 +166,25 @@ function resolveExposureAliases(value: Record<string, unknown>): Record<string, 
 	return resolved;
 }
 
+/**
+ * The exposure a tool has in this harness. Upstream reaches `codemode` and `deferred` tools through the
+ * codemode and tool_search tools; this harness has neither, so a tool that is not hidden is declared to
+ * the model directly. `mcp.json` is shared with the learner's own Pi and is read as written: only the
+ * effect differs.
+ */
+export function effectiveMcpExposure(exposure: McpExposure | undefined): McpExposure {
+	return exposure === "hidden" ? "hidden" : "direct";
+}
+
 /** Exposure of one tool of a server: its `toolExposure` entry, else the server's `exposure`. */
 export function getMcpToolExposure(config: McpServerConfig, toolName: string): McpExposure {
 	const overrides = config.toolExposure ?? {};
 	const exact = overrides[toolName];
-	if (exact !== undefined) return exact;
+	if (exact !== undefined) return effectiveMcpExposure(exact);
 	for (const [pattern, exposure] of Object.entries(overrides)) {
-		if (pattern.includes("*") && toolPatternRegExp(pattern).test(toolName)) return exposure;
+		if (pattern.includes("*") && toolPatternRegExp(pattern).test(toolName)) return effectiveMcpExposure(exposure);
 	}
-	return config.exposure ?? "codemode";
+	return effectiveMcpExposure(config.exposure);
 }
 
 /** Checks `exposure` and `toolExposure`, after aliases were resolved. Returns an error message. */

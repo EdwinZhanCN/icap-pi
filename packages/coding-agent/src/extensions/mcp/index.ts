@@ -28,7 +28,6 @@
 
 import { join, resolve } from "node:path";
 import { createMcpToolName, mcpNamespace } from "@earendil-works/pi-mcp";
-import type { SelectItem } from "@earendil-works/pi-tui";
 import type { TSchema } from "typebox";
 import { getAgentDir } from "../../config.ts";
 import type {
@@ -41,9 +40,8 @@ import type {
 import type { ModelRegistry } from "../../core/model-registry.ts";
 import { sliceHead } from "../../core/tools/truncate.ts";
 import { openBrowser } from "../../utils/open-browser.ts";
-import { CODEMODE_TOOL_NAME } from "../codemode/tool.ts";
-import { TOOL_SEARCH_TOOL_NAME } from "../tool-search/tool.ts";
 import {
+	effectiveMcpExposure,
 	getMcpToolExposure,
 	type LoadedMcpConfig,
 	loadMcpConfig,
@@ -62,8 +60,7 @@ import {
 import { loadMcpRuntime } from "./runtime.lazy.ts";
 import type * as McpRuntime from "./runtime.ts";
 import type { McpServerConnection, McpServerLog, McpTransportFactory } from "./runtime.ts";
-import { createMcpToolDefinition, createMcpToolRenderers, type McpToolDetails } from "./tools.ts";
-import { type McpMenu, type McpUi, showMcpManager } from "./ui.ts";
+import { createMcpToolDefinition, type McpToolDetails } from "./tools.ts";
 
 export type { McpTransportFactory } from "./runtime.ts";
 
@@ -134,12 +131,12 @@ function isEnabled(server: Pick<McpServer, "entry">): boolean {
 }
 
 function exposureOf(entry: McpServerEntry): McpExposure {
-	return entry.config.exposure ?? "codemode";
+	return effectiveMcpExposure(entry.config.exposure);
 }
 
 /** Exposures the server's tools can have, known from its config before it connects. */
 function configuredExposures(entry: McpServerEntry): Set<McpExposure> {
-	return new Set([exposureOf(entry), ...Object.values(entry.config.toolExposure ?? {})]);
+	return new Set([exposureOf(entry), ...Object.values(entry.config.toolExposure ?? {}).map(effectiveMcpExposure)]);
 }
 
 /** Whether some of the server's tools are declared to the model, so the first prompt waits for them. */
@@ -379,12 +376,6 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 		/** Last definition registered under each tool name, to re-register withdrawn tools as hidden. */
 		const definitions = new Map<string, ToolDefinition<TSchema, McpToolDetails>>();
 
-		// A resumed session renders calls to MCP tools before their server connected, if it ever does.
-		pi.registerToolRenderer((toolName, next) => {
-			const match = /^mcp__(.+?)__(.+)$/.exec(toolName);
-			return next() ?? (match ? createMcpToolRenderers(`${match[1]}/${match[2]}`) : undefined);
-		});
-
 		const registerTools = (connection: McpServerConnection) => {
 			const server = connection.entry.name;
 			const entry = findServer(server)?.entry ?? connection.entry;
@@ -494,47 +485,11 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 		};
 
 		/**
-		 * Tools that are not declared to the model are reached through the codemode tool (scripts call
-		 * them) or the tool_search tool (it declares them). Either reaches every such tool. Activate the
-		 * one the tools' exposure asks for: codemode for `codemode` unless `autoEnableCodemode` is false,
-		 * tool_search for `deferred`.
+		 * Upstream activates the codemode or tool_search tool here, for tools that are not declared to
+		 * the model. This harness has neither and declares every MCP tool directly
+		 * (effectiveMcpExposure), so there is nothing to activate.
 		 */
-		const ensureDiscoveryActive = (ctx: ExtensionContext) => {
-			// From the config, so the tool is active before the servers connect. Resource tools share
-			// their server's exposure.
-			const exposures = new Set<McpExposure>();
-			for (const server of servers) {
-				if (isEnabled(server)) for (const exposure of configuredExposures(server.entry)) exposures.add(exposure);
-			}
-			const needsCodemode = exposures.has("codemode");
-			const needsToolSearch = exposures.has("deferred");
-			if (!needsCodemode && !needsToolSearch) return;
-			// Only a tool of these names that declares `reachesTools` can reach MCP tools; another
-			// extension's tool of the same name without it is never activated.
-			const tools = pi.getAllTools();
-			const hasReachingTool = (name: string) => tools.some((tool) => tool.name === name && tool.reachesTools);
-			const hasCodemode = hasReachingTool(CODEMODE_TOOL_NAME);
-			const hasToolSearch = hasReachingTool(TOOL_SEARCH_TOOL_NAME);
-			const active = pi.getActiveTools();
-			const activate: string[] = [];
-			if (needsCodemode && hasCodemode && autoEnableCodemode && !active.includes(CODEMODE_TOOL_NAME)) {
-				activate.push(CODEMODE_TOOL_NAME);
-			}
-			if (needsToolSearch && hasToolSearch && !active.includes(TOOL_SEARCH_TOOL_NAME)) {
-				activate.push(TOOL_SEARCH_TOOL_NAME);
-			}
-			if (activate.length > 0) pi.setActiveTools([...active, ...activate]);
-			const reachable = [...active, ...activate];
-			if (hasCodemode && reachable.includes(CODEMODE_TOOL_NAME)) return;
-			if (hasToolSearch && reachable.includes(TOOL_SEARCH_TOOL_NAME)) return;
-			if (warnedUnreachable) return;
-			warnedUnreachable = true;
-			const reason = needsCodemode && hasCodemode && !autoEnableCodemode ? " (autoEnableCodemode is false)" : "";
-			ctx.ui.notify(
-				`MCP tools are only reachable from the codemode or tool_search tool, but neither is active${reason}; they cannot be called.`,
-				"warning",
-			);
-		};
+		const ensureDiscoveryActive = (_ctx: ExtensionContext) => {};
 
 		/**
 		 * Stored tokens of servers waiting for a sign-in, as they were when the sign-in was needed.
@@ -785,234 +740,7 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 		};
 
 		// ---------------------------------------------------------------------------------------
-		// Manager (`/mcp` in the TUI)
-		// ---------------------------------------------------------------------------------------
-
-		const notices = () => [
-			...configErrors.map((error) => `config: ${error}`),
-			...overridden.map((line) => `overridden: ${line}`),
-		];
-
-		const serversMenu = (): McpMenu => ({
-			title: "MCP servers",
-			error: notices().join("\n") || undefined,
-			items: [...servers]
-				.sort((a, b) => attentionRank(a) - attentionRank(b) || a.entry.name.localeCompare(b.entry.name))
-				.map((server) => ({
-					value: server.entry.name,
-					label: server.entry.name,
-					description: `${describeState(server)} · ${exposureOf(server.entry)} · ${server.entry.override ? "global, project override" : (server.entry.scope ?? server.entry.source)}`,
-				})),
-			empty: `No MCP servers configured. Add them to ${resolve(getAgentDir(), "mcp.json")} or .pi/mcp.json.`,
-			confirmLabel: "manage",
-			cancelLabel: "close",
-		});
-
-		const serverMenu = (name: string): McpMenu => {
-			const server = findServer(name);
-			if (!server) {
-				return {
-					title: name,
-					items: [],
-					empty: "This server is no longer configured.",
-					confirmLabel: "",
-					cancelLabel: "back",
-				};
-			}
-			const { entry, connection } = server;
-			const saved =
-				entry.scope === "extension"
-					? "for this session"
-					: entry.override
-						? "saved to the project mcp.json"
-						: entry.scope
-							? `saved to the ${entry.scope} mcp.json`
-							: "saved to mcp.json";
-			// Global servers without an override can be turned on or off for the trusted project alone.
-			const inProject = entry.scope === "global" && !entry.override && projectConfig !== undefined;
-			const inProjectSaved = "saved to the project mcp.json";
-			const items: SelectItem[] = [];
-			if (!isEnabled(server)) {
-				items.push({ value: "enable", label: "Enable", description: saved });
-				if (inProject) {
-					items.push({ value: "enable-project", label: "Enable in this project", description: inProjectSaved });
-				}
-			} else {
-				const state = connection?.state;
-				if (state === "needs-auth")
-					items.push({ value: "signin", label: "Sign in", description: "opens the browser" });
-				if (state === "connected" && connection) {
-					items.push({ value: "tools", label: "Tools", description: `${connection.tools.length} offered` });
-				}
-				if (state === "failed" || state === "disconnected" || state === "connected" || state === "needs-auth") {
-					items.push({ value: "reconnect", label: "Reconnect" });
-				}
-				if (state === "connected" && connection?.oauthUrl) {
-					items.push({ value: "signout", label: "Sign out", description: "deletes the stored credentials" });
-				}
-				items.push({ value: "exposure", label: "Exposure", description: exposureOf(entry) });
-				items.push({ value: "disable", label: "Disable", description: saved });
-				if (inProject) {
-					items.push({ value: "disable-project", label: "Disable in this project", description: inProjectSaved });
-				}
-			}
-			const details = [
-				describeTransport(entry),
-				`${entry.scope ?? "config"}: ${entry.source}`,
-				...(entry.override ? [`project override: ${entry.override}`] : []),
-				`State: ${describeState(server, false)}`,
-			];
-			const error = [server.message, connection?.state === "connected" ? undefined : connection?.error]
-				.filter((line): line is string => line !== undefined)
-				.join("\n");
-			return {
-				title: `MCP server ${name}`,
-				details: details.join("\n"),
-				error: error || undefined,
-				items,
-				selected: items[0]?.value,
-				confirmLabel: "select",
-				cancelLabel: "back",
-			};
-		};
-
-		const showTools = async (ui: McpUi, server: McpServer) => {
-			const exposure = exposureOf(server.entry);
-			const overridden = Object.keys(server.entry.config.toolExposure ?? {}).length > 0;
-			await ui.menu(() => ({
-				title: `Tools of ${server.entry.name}`,
-				details: `Exposure ${exposure}: ${exposure === "hidden" ? "unreachable" : EXPOSURE_DESCRIPTIONS[exposure]}${overridden ? "\nSome tools override it with toolExposure." : ""}`,
-				items: (server.connection?.tools ?? []).map((tool) => {
-					const toolExposure = getMcpToolExposure(server.entry.config, tool.name);
-					const description = firstLine(tool.description ?? "");
-					return {
-						value: tool.name,
-						label: tool.name,
-						description: toolExposure === exposure ? description : `[${toolExposure}] ${description}`,
-					};
-				}),
-				empty: "The server offers no tools.",
-				confirmLabel: "back",
-				cancelLabel: "back",
-			}));
-		};
-
-		const chooseExposure = async (ui: McpUi, server: McpServer): Promise<string | undefined> => {
-			const current = exposureOf(server.entry);
-			const choice = await ui.menu(() => ({
-				title: `Exposure of ${server.entry.name}`,
-				details:
-					server.entry.scope === "extension"
-						? `Applies to this session; the server is registered by ${server.entry.source}.`
-						: `Saved to ${server.entry.override ?? server.entry.source}.`,
-				items: (Object.keys(EXPOSURE_DESCRIPTIONS) as (keyof typeof EXPOSURE_DESCRIPTIONS)[]).map((exposure) => ({
-					value: exposure,
-					label: `${exposure === current ? "✓ " : "  "}${exposure}`,
-					description: EXPOSURE_DESCRIPTIONS[exposure],
-				})),
-				selected: current,
-				confirmLabel: "save",
-				cancelLabel: "back",
-			}));
-			if (!choice || choice === current) return undefined;
-			return setExposure(server, choice as McpExposure);
-		};
-
-		/** Sign in with the manager view's sign-in screen, which shows the URL with a copy key and cancels with Esc. */
-		const signInWithUi = (ui: McpUi, server: McpServer): Promise<string | undefined> => {
-			const title = `Sign in to ${server.entry.name}`;
-			const cancel = new AbortController();
-			const status = (message: string) => ui.status(title, message, () => cancel.abort());
-			let authorizationUrl = "";
-			status("Contacting the authorization server…");
-			return signIn(
-				server,
-				{
-					showAuthorizationUrl: (url) => {
-						authorizationUrl = url.href;
-						openUrl(url.href);
-					},
-					promptForRedirectUrl: async (signal) => {
-						const value = await ui.redirectUrl(title, authorizationUrl, signal);
-						status("Connecting…");
-						return value;
-					},
-				},
-				cancel.signal,
-			);
-		};
-
-		/** Keep the subscribed menu usable while a connection opens or closes. */
-		const runInBackground = (
-			ctx: ExtensionContext,
-			server: McpServer,
-			operation: () => Promise<string | undefined>,
-		) => {
-			const ready = operation();
-			const attempt = server.attempt;
-			const { signal } = session;
-			const finish = (message: string | undefined) => {
-				if (signal.aborted || server.attempt !== attempt || !servers.includes(server)) return;
-				server.message = message;
-				ensureDiscoveryActive(ctx);
-				emitChange();
-			};
-			void track(ready.then(finish, (error: unknown) => finish(errorMessage(error))));
-		};
-
-		const runAction = async (ui: McpUi, ctx: ExtensionContext, server: McpServer, action: string) => {
-			const { signal } = session;
-			let message: string | undefined;
-			switch (action) {
-				case "signin":
-					message = await signInWithUi(ui, server);
-					break;
-				case "reconnect":
-					// Connection state and error already report failures, including required sign-ins.
-					runInBackground(ctx, server, async () => {
-						await reconnect(server);
-						return undefined;
-					});
-					break;
-				case "signout":
-					await signOut(server);
-					break;
-				case "tools":
-					await showTools(ui, server);
-					break;
-				case "exposure":
-					message = await chooseExposure(ui, server);
-					break;
-				case "enable":
-				case "disable":
-				case "enable-project":
-				case "disable-project": {
-					const enable = action.startsWith("enable");
-					runInBackground(ctx, server, () => setEnabled(server, enable, action.endsWith("-project")));
-					break;
-				}
-			}
-			// The session ended meanwhile (for example during a sign-in), which made ctx stale.
-			if (signal.aborted) return;
-			server.message = message;
-			ensureDiscoveryActive(ctx);
-			emitChange();
-		};
-		const manage = async (ui: McpUi, ctx: ExtensionContext) => {
-			for (;;) {
-				const name = await ui.menu(serversMenu, subscribe);
-				if (!name) return;
-				for (;;) {
-					const action = await ui.menu(() => serverMenu(name), subscribe);
-					const server = findServer(name);
-					if (!action || !server) break;
-					await runAction(ui, ctx, server, action);
-				}
-			}
-		};
-
-		// ---------------------------------------------------------------------------------------
-		// Subcommands and plain status (no TUI)
+		// Subcommands and plain status
 		// ---------------------------------------------------------------------------------------
 
 		const formatStatus = (): string => {
@@ -1083,25 +811,18 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 				return;
 			}
 			const { signal } = session;
-			let failure: string | undefined;
-			if (ctx.mode === "tui") {
-				await showMcpManager(ctx, async (ui) => {
-					failure = await signInWithUi(ui, server);
-				});
-			} else {
-				failure = await signIn(server, {
-					showAuthorizationUrl: (url) => {
-						ctx.ui.notify(`Sign in to MCP server "${name}" in your browser:\n${url.href}`, "info");
-						openUrl(url.href);
-					},
-					promptForRedirectUrl: (signal) =>
-						ctx.ui.input(
-							`Waiting for sign-in to "${name}". If the browser cannot reach this machine, paste the URL it was redirected to.`,
-							"http://127.0.0.1:.../callback?code=...",
-							{ signal },
-						),
-				});
-			}
+			const failure = await signIn(server, {
+				showAuthorizationUrl: (url) => {
+					ctx.ui.notify(`Sign in to MCP server "${name}" in your browser:\n${url.href}`, "info");
+					openUrl(url.href);
+				},
+				promptForRedirectUrl: (signal) =>
+					ctx.ui.input(
+						`Waiting for sign-in to "${name}". If the browser cannot reach this machine, paste the URL it was redirected to.`,
+						"http://127.0.0.1:.../callback?code=...",
+						{ signal },
+					),
+			});
 			// The session ended meanwhile, which cancelled the sign-in and made ctx stale.
 			if (signal.aborted) return;
 			if (failure) {
@@ -1284,11 +1005,8 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 			handler: async (args, ctx) => {
 				const [action, name, ...extra] = args.trim().split(/\s+/).filter(Boolean);
 				if (action === undefined) {
-					if (ctx.mode === "tui") await showMcpManager(ctx, (ui) => manage(ui, ctx));
-					else {
-						await pending;
-						ctx.ui.notify(formatStatus(), "info");
-					}
+					await pending;
+					ctx.ui.notify(formatStatus(), "info");
 					return;
 				}
 				if (extra.length > 0) {
